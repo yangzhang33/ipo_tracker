@@ -1,0 +1,140 @@
+基于当前已有的 ipo_tracker 项目，请只实现数据库模型层，不要实现抓取逻辑，不要实现 parser，不要实现 job。
+
+目标：
+把数据库表完整建好，供后续阶段使用。
+
+请只修改这些文件：
+- app/models.py
+- app/schemas.py
+- 如有必要可少量修改 app/db.py
+- 如有必要可少量更新 README.md
+
+====================
+一、技术要求
+====================
+
+继续使用：
+- SQLAlchemy
+- SQLite
+- Python 3.11+
+
+====================
+二、需要实现的表
+====================
+
+请用 SQLAlchemy 定义以下表，并设置合理外键关系。
+
+1. issuers
+字段：
+- id INTEGER PRIMARY KEY
+- company_name TEXT NOT NULL
+- cik TEXT UNIQUE
+- ticker TEXT
+- exchange TEXT
+- country TEXT
+- is_foreign_issuer BOOLEAN DEFAULT False
+- status TEXT
+- created_at TEXT
+- updated_at TEXT
+
+status 推荐值：
+- candidate
+- filed
+- priced
+- trading
+- withdrawn
+
+2. filings
+字段：
+- id INTEGER PRIMARY KEY
+- issuer_id INTEGER NOT NULL
+- accession_no TEXT NOT NULL
+- form_type TEXT NOT NULL
+- filing_date TEXT NOT NULL
+- primary_doc_url TEXT
+- filing_index_url TEXT
+- is_parsed INTEGER DEFAULT 0
+- created_at TEXT
+
+约束：
+- UNIQUE (issuer_id, accession_no, form_type)
+
+3. offerings
+字段：
+- id INTEGER PRIMARY KEY
+- issuer_id INTEGER NOT NULL
+- filing_id INTEGER
+- source_form_type TEXT
+- price_range_low REAL
+- price_range_high REAL
+- offer_price REAL
+- pricing_date TEXT
+- expected_trade_date TEXT
+- shares_offered_total REAL
+- shares_primary REAL
+- shares_secondary REAL
+- greenshoe_shares REAL
+- gross_proceeds REAL
+- exchange TEXT
+- bookrunners TEXT
+- parsed_at TEXT
+
+4. capitalization
+字段：
+- id INTEGER PRIMARY KEY
+- issuer_id INTEGER NOT NULL
+- filing_id INTEGER
+- shares_outstanding_pre_ipo REAL
+- shares_outstanding_post_ipo REAL
+- free_float_at_ipo REAL
+- float_ratio REAL
+- fully_diluted_shares REAL
+- parsed_at TEXT
+
+5. lockups
+字段：
+- id INTEGER PRIMARY KEY
+- issuer_id INTEGER NOT NULL
+- filing_id INTEGER
+- lockup_days INTEGER
+- lockup_start_date TEXT
+- lockup_end_date TEXT
+- is_staged_unlock BOOLEAN DEFAULT False
+- unlock_notes TEXT
+- unlock_shares_estimate REAL
+- confidence TEXT
+- parsed_at TEXT
+
+confidence 推荐值：
+- high
+- medium
+- low
+
+====================
+三、schema 要求
+====================
+
+请在 app/schemas.py 中定义基础 Pydantic schema，至少包括：
+- IssuerCreate / IssuerRead
+- FilingCreate / FilingRead
+- OfferingCreate / OfferingRead
+- CapitalizationCreate / CapitalizationRead
+- LockupCreate / LockupRead
+
+要求简单、实用，不要过度设计。
+
+====================
+四、实现要求
+====================
+
+1. 尽量加 relationship，方便后续查询
+2. 时间字段可以先使用字符串，保持简单
+3. 不要加入 Alembic
+4. 确保 scripts/init_db.py 运行后可以正确建表
+
+====================
+五、输出要求
+====================
+
+请输出修改后的完整文件代码。
+不要实现抓取逻辑。

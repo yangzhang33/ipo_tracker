@@ -1,0 +1,649 @@
+你是一个资深 Python 后端工程师和数据抓取工程师。请帮我实现一个“美国 IPO 个人跟踪系统”的第一版。目标是低成本、稳定、可维护，优先使用官方或低成本数据源，不要引入 LLM，不要做打分系统，不要做复杂估值，只做纯数据提取、落库和导出。
+
+请严格按照下面的产品需求和工程要求实现。不要擅自扩大范围，不要加入我没要求的复杂功能。先做 MVP，代码要清晰、模块化、可运行。
+
+====================
+一、产品目标
+====================
+
+实现一个面向个人使用的美国 IPO 数据跟踪系统。系统每天自动运行，完成以下任务：
+
+1. 发现近期美国 IPO 候选公司
+2. 同步 SEC EDGAR filings
+3. 从 prospectus / filing 中提取 IPO 核心字段
+4. 提取 lock-up 期限和预计到期日
+5. 导出 3 份 CSV 报表
+
+第一版只做：
+- 美国普通 IPO
+- 外国发行人通过 F-1 在美国上市的 IPO
+
+第一版不做：
+- SPAC
+- direct listing
+- ADR 二次上市
+- ETF / 基金类产品
+- OTC
+- LLM
+- 买卖打分
+- 新闻情绪
+- 实时行情
+- 复杂财务估值
+
+系统目标是“单纯的数据提取系统”。
+
+====================
+二、数据源要求
+====================
+
+优先使用低成本和官方来源：
+
+1. SEC EDGAR
+   - 作为最核心数据源
+   - 用于获取 submissions JSON、filing 历史、prospectus HTML
+   - 关注 form types:
+     - S-1
+     - S-1/A
+     - F-1
+     - F-1/A
+     - 424B4
+     - 424B1
+     - RW
+
+2. Nasdaq IPO 页面
+   - 仅用于发现 IPO 候选公司
+
+3. NYSE IPO Center
+   - 仅用于发现 IPO 候选公司和交叉校验
+
+实现时请注意：
+- SEC 请求必须设置清晰的 User-Agent
+- 加入基础限速和重试
+- 对下载的原始 HTML / JSON 做本地缓存
+- 不要高频抓取 Nasdaq / NYSE，每日一次即可
+
+====================
+三、最终产出
+====================
+
+每天导出 3 个 CSV 文件到 data/exports/：
+
+1. upcoming_ipos.csv
+字段至少包括：
+- company_name
+- cik
+- ticker
+- exchange
+- filing_status
+- price_range_low
+- price_range_high
+- offer_price
+- pricing_date
+- expected_trade_date
+- shares_offered_total
+- shares_primary
+- shares_secondary
+- greenshoe_shares
+- bookrunners
+- latest_prospectus_url
+
+2. recent_ipos.csv
+字段至少包括：
+- company_name
+- ticker
+- exchange
+- offer_price
+- pricing_date
+- trade_date
+- shares_offered_total
+- shares_outstanding_post_ipo
+- free_float_at_ipo
+- float_ratio
+- lockup_days
+- lockup_end_date
+
+3. upcoming_unlocks.csv
+字段至少包括：
+- company_name
+- ticker
+- offer_price
+- trade_date
+- lockup_days
+- lockup_end_date
+- is_staged_unlock
+- unlock_notes
+- unlock_shares_estimate
+- source_filing_url
+
+====================
+四、技术栈要求
+====================
+
+请使用：
+- Python 3.11+
+- SQLAlchemy
+- SQLite（第一版默认）
+- httpx
+- selectolax
+- lxml
+- pandas
+- pydantic
+- python-dateutil
+- tenacity
+
+可选：
+- typer 或 argparse 做 CLI
+- logging 标准库
+
+不要引入：
+- Celery
+- Redis
+- Docker（除非你只是顺手提供，不要强依赖）
+- Playwright / Selenium
+- LLM SDK
+- 重型框架
+
+====================
+五、项目结构要求
+====================
+
+请按这个目录结构实现：
+
+ipo_tracker/
+  app/
+    config.py
+    db.py
+    models.py
+    schemas.py
+
+    collectors/
+      nasdaq.py
+      nyse.py
+      sec.py
+
+    parsers/
+      filing_locator.py
+      prospectus_parser.py
+      lockup_parser.py
+      capitalization_parser.py
+
+    jobs/
+      discover_candidates.py
+      sync_sec_filings.py
+      parse_offering_data.py
+      parse_lockups.py
+      export_reports.py
+
+    utils/
+      http.py
+      text.py
+      dates.py
+      logging.py
+
+  data/
+    raw/
+    exports/
+
+  scripts/
+    init_db.py
+    run_daily.py
+
+  tests/
+  requirements.txt
+  README.md
+
+====================
+六、数据库设计要求
+====================
+
+请用 SQLAlchemy 定义以下表，并提供建表初始化脚本。
+
+1. issuers
+字段：
+- id INTEGER PRIMARY KEY
+- company_name TEXT NOT NULL
+- cik TEXT UNIQUE
+- ticker TEXT
+- exchange TEXT
+- country TEXT
+- is_foreign_issuer BOOLEAN DEFAULT 0
+- status TEXT
+- created_at TEXT
+- updated_at TEXT
+
+status 建议值：
+- candidate
+- filed
+- priced
+- trading
+- withdrawn
+
+2. filings
+字段：
+- id INTEGER PRIMARY KEY
+- issuer_id INTEGER NOT NULL
+- accession_no TEXT NOT NULL
+- form_type TEXT NOT NULL
+- filing_date TEXT NOT NULL
+- primary_doc_url TEXT
+- filing_index_url TEXT
+- is_parsed INTEGER DEFAULT 0
+- created_at TEXT
+
+约束：
+- UNIQUE (issuer_id, accession_no, form_type)
+
+3. offerings
+字段：
+- id INTEGER PRIMARY KEY
+- issuer_id INTEGER NOT NULL
+- filing_id INTEGER
+- source_form_type TEXT
+- price_range_low REAL
+- price_range_high REAL
+- offer_price REAL
+- pricing_date TEXT
+- expected_trade_date TEXT
+- shares_offered_total REAL
+- shares_primary REAL
+- shares_secondary REAL
+- greenshoe_shares REAL
+- gross_proceeds REAL
+- exchange TEXT
+- bookrunners TEXT
+- parsed_at TEXT
+
+4. capitalization
+字段：
+- id INTEGER PRIMARY KEY
+- issuer_id INTEGER NOT NULL
+- filing_id INTEGER
+- shares_outstanding_pre_ipo REAL
+- shares_outstanding_post_ipo REAL
+- free_float_at_ipo REAL
+- float_ratio REAL
+- fully_diluted_shares REAL
+- parsed_at TEXT
+
+5. lockups
+字段：
+- id INTEGER PRIMARY KEY
+- issuer_id INTEGER NOT NULL
+- filing_id INTEGER
+- lockup_days INTEGER
+- lockup_start_date TEXT
+- lockup_end_date TEXT
+- is_staged_unlock BOOLEAN DEFAULT 0
+- unlock_notes TEXT
+- unlock_shares_estimate REAL
+- confidence TEXT
+- parsed_at TEXT
+
+confidence 建议值：
+- high
+- medium
+- low
+
+请正确设置外键关系。
+
+====================
+七、字段口径要求
+====================
+
+第一版请固定以下口径，不要擅自复杂化：
+
+1. free_float_at_ipo
+= shares_offered_total
+
+2. float_ratio
+= free_float_at_ipo / shares_outstanding_post_ipo
+
+3. lockup_start_date
+- 如果有 424B4，则默认使用 424B4 filing_date
+- 若没有 424B4，则退回使用包含 offer_price 的 prospectus filing_date
+
+4. lockup_end_date
+= lockup_start_date + lockup_days
+
+5. 第一版不做复杂老股东提前流通识别
+6. 第一版不做复杂 staged unlock 拆分，只要识别并标注即可
+
+====================
+八、状态机要求
+====================
+
+请实现 issuer 的简单状态机更新逻辑：
+
+- candidate -> filed
+  条件：出现 S-1 / F-1
+
+- filed -> priced
+  条件：出现 424B4 且 offer_price 非空
+
+- priced -> trading
+  第一版可以先不精确判断
+  可选简化为 pricing_date 后 1 个交易日近似设为 trading
+  或先不自动切到 trading，只保留 priced
+
+- 任意 -> withdrawn
+  条件：出现 RW
+
+====================
+九、实现步骤要求
+====================
+
+请按下面顺序实现，并确保每一步都能独立运行。
+
+--------------------
+步骤 1：基础工程骨架
+--------------------
+实现：
+- requirements.txt
+- config.py
+- logging.py
+- db.py
+- models.py
+- schemas.py
+- scripts/init_db.py
+
+要求：
+- 可以通过 python scripts/init_db.py 初始化 SQLite 数据库
+- README 中写明运行方式
+
+--------------------
+步骤 2：SEC 客户端
+--------------------
+文件：
+- app/collectors/sec.py
+
+至少实现以下函数：
+
+1. get_submissions_json(cik: str) -> dict
+2. download_filing_html(url: str) -> str
+3. build_filing_primary_doc_url(cik: str, accession_no: str, primary_doc: str) -> str
+
+要求：
+- 设置 User-Agent
+- 有基础重试
+- 有本地缓存
+- 对 HTTP 错误做合理处理
+
+--------------------
+步骤 3：Nasdaq / NYSE 候选抓取
+--------------------
+文件：
+- app/collectors/nasdaq.py
+- app/collectors/nyse.py
+
+目标：
+- 从官方页面抓 IPO 候选公司
+- 第一版不要求完美覆盖
+- 只要求尽量提取：
+  - company_name
+  - ticker
+  - exchange
+  - 页面中的日期相关字段
+  - source_url
+
+文件：
+- app/jobs/discover_candidates.py
+
+要求：
+- 把抓到的候选公司落库到 issuers
+- 去重逻辑先用 company_name + ticker
+- 默认 status = candidate
+
+--------------------
+步骤 4：同步 SEC filings
+--------------------
+文件：
+- app/jobs/sync_sec_filings.py
+
+要求：
+- 对 issuers 中已知 CIK 的公司拉取 submissions JSON
+- 过滤出目标 form：
+  - S-1
+  - S-1/A
+  - F-1
+  - F-1/A
+  - 424B4
+  - 424B1
+  - RW
+- 写入 filings 表
+- 更新 issuer status
+
+注意：
+- CIK 绑定第一版可先预留接口
+- 如果自动从 Nasdaq/NYSE 拿不到 CIK，可允许维护一个简单本地映射文件或手工补充
+- 代码结构要支持后续扩展 CIK 自动匹配
+
+--------------------
+步骤 5：选择最佳 filing
+--------------------
+文件：
+- app/parsers/filing_locator.py
+
+实现函数：
+select_best_filing(filings: list) -> filing | None
+
+优先级规则固定：
+1. 424B4
+2. 424B1
+3. 最新 S-1/A 或 F-1/A
+4. 最新 S-1 或 F-1
+
+--------------------
+步骤 6：解析发行数据
+--------------------
+文件：
+- app/jobs/parse_offering_data.py
+- app/parsers/prospectus_parser.py
+- app/parsers/capitalization_parser.py
+
+要求：
+1. 下载并解析最佳 filing 对应 HTML
+2. 优先处理 HTML，不做 OCR，不做 PDF
+3. 先把 HTML 转成可搜索文本
+4. 按 section 或关键词切块，再做正则提取
+
+第一版先实现“最小可用字段”：
+- offer_price
+- shares_offered_total
+- greenshoe_shares
+- shares_outstanding_post_ipo
+- bookrunners
+
+然后再实现第二批字段：
+- price_range_low
+- price_range_high
+- shares_primary
+- shares_secondary
+- shares_outstanding_pre_ipo
+- gross_proceeds
+- fully_diluted_shares
+
+建议解析 section：
+- The Offering
+- Capitalization
+- Dilution
+- Underwriting
+- Shares Eligible for Future Sale
+
+请实现稳定、可维护的规则函数，不要写成一大坨不可维护的正则泥团。
+
+要求：
+- 每个字段的提取逻辑尽量独立为函数
+- 找不到就返回 None，不要瞎猜
+- 解析结果写入 offerings / capitalization
+- 同一个 issuer 多次解析时，优先由更高优先级 filing 覆盖旧值
+
+请在代码中封装类似：
+- extract_offer_price(text)
+- extract_shares_offered_total(text)
+- extract_greenshoe_shares(text)
+- extract_bookrunners(text)
+- extract_shares_outstanding_post_ipo(text)
+等函数
+
+--------------------
+步骤 7：解析 lock-up
+--------------------
+文件：
+- app/jobs/parse_lockups.py
+- app/parsers/lockup_parser.py
+
+目标：
+提取：
+- lockup_days
+- lockup_start_date
+- lockup_end_date
+- is_staged_unlock
+- unlock_notes
+- unlock_shares_estimate（第一版可留空或有限支持）
+
+重点 section：
+- Underwriting
+- Shares Eligible for Future Sale
+- Lock-Up Agreements
+- Market Standoff
+
+请匹配这些常见模式：
+- for a period of 180 days after the date of this prospectus
+- for 180 days after the date of this prospectus
+- for 90 days after the date of this prospectus
+- beginning 181 days after the date of this prospectus
+
+staged unlock 识别条件示例：
+- 出现 25% released
+- at the beginning of each 180-day period
+- subject to certain exceptions
+- earnings-related release conditions
+- multi-stage release wording
+
+要求：
+- 标准 180-day lock-up 应能高概率识别
+- 复杂情况至少能标记 is_staged_unlock = True
+- unlock_notes 保留简洁说明或原句片段
+- confidence 字段根据识别质量赋值
+- 结果写入 lockups 表
+
+--------------------
+步骤 8：导出报表
+--------------------
+文件：
+- app/jobs/export_reports.py
+
+每天导出：
+1. upcoming_ipos.csv
+2. recent_ipos.csv
+3. upcoming_unlocks.csv
+
+建议筛选逻辑：
+
+upcoming_ipos.csv
+- status in ('candidate', 'filed', 'priced')
+- 最近 60 天有相关 filing
+
+recent_ipos.csv
+- offer_price 不为空
+- pricing_date 在最近 30 天内
+
+upcoming_unlocks.csv
+- lockup_end_date 在未来 30 天内
+
+请使用 pandas 导出到 data/exports/
+
+--------------------
+步骤 9：总入口脚本
+--------------------
+文件：
+- scripts/run_daily.py
+
+主流程固定为：
+1. discover_candidates()
+2. sync_sec_filings()
+3. parse_offering_data()
+4. parse_lockups()
+5. export_reports()
+
+要求：
+- 支持直接 python scripts/run_daily.py 运行
+- 在日志中清晰输出每一步执行结果
+- 遇到单家公司失败时不要让全流程崩掉
+
+====================
+十、实现风格要求
+====================
+
+请遵守以下工程要求：
+
+1. 代码清晰、模块化
+2. 不要过度设计
+3. 每个模块职责单一
+4. 所有核心函数加类型注解
+5. 给关键函数写 docstring
+6. 日志要可读
+7. 网络请求要有超时、重试、限速、缓存
+8. 对解析失败要容错，返回 None，不要抛出大量未处理异常
+9. 不要把所有逻辑塞进一个文件
+10. 提供 README，说明：
+   - 安装
+   - 初始化数据库
+   - 手动补充 CIK 的方式
+   - 运行 daily job 的方式
+   - 导出文件位置
+
+====================
+十一、测试要求
+====================
+
+请至少提供基础测试或可运行样例，重点覆盖：
+
+1. filing_locator 优先级是否正确
+2. offer_price 提取函数的典型样本
+3. lockup_days 提取函数的典型样本
+4. 日期计算是否正确
+5. SQLite 初始化是否成功
+
+如果你不写完整 pytest，也至少给出一些 parser 的最小测试样例。
+
+====================
+十二、MVP 最小成功标准
+====================
+
+请确保完成后，系统至少满足以下能力：
+
+1. 能初始化数据库
+2. 能抓到 Nasdaq / NYSE 的 IPO 候选公司
+3. 能对已知 CIK 的公司拉取 SEC submissions
+4. 能筛出目标 forms 并写入 filings
+5. 能选出最佳 filing
+6. 能从部分标准 424B4 中提取：
+   - offer_price
+   - shares_offered_total
+   - greenshoe_shares
+   - shares_outstanding_post_ipo
+7. 能识别常见 180-day lock-up
+8. 能计算 lockup_end_date
+9. 能导出 3 个 CSV
+
+====================
+十三、输出方式要求
+====================
+
+请直接输出完整项目代码，不要只给高层建议。
+
+输出顺序建议：
+1. requirements.txt
+2. README.md
+3. 目录树
+4. 各文件代码
+
+如果一次输出太长，可以分批输出，但每一批都必须是可继续拼接的完整代码片段。
+
+优先保证：
+- scripts/init_db.py 可运行
+- scripts/run_daily.py 可运行
+- 核心 parser 和 job 可运行
+
+不要只输出伪代码，我需要尽量接近可直接运行的代码。

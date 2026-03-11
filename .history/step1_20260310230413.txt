@@ -1,0 +1,121 @@
+请帮我实现一个 Python 项目的第一阶段：只搭建工程骨架，不做任何抓取逻辑。
+
+项目名称：ipo_tracker
+
+目标：
+搭建一个面向个人使用的美国 IPO 跟踪系统的基础目录结构和初始化代码。现在只做项目骨架、依赖文件、配置、日志、数据库连接和初始化脚本，不要实现抓取逻辑。
+
+请严格按下面要求实现。
+
+====================
+一、技术要求
+====================
+
+使用：
+- Python 3.11+
+- SQLAlchemy
+- SQLite
+- pydantic
+- logging 标准库
+
+先不要实现：
+- SEC 抓取
+- Nasdaq / NYSE 抓取
+- parser
+- job
+- 导出 CSV
+- tests 以外的复杂逻辑
+
+====================
+二、目录结构
+====================
+
+请创建以下结构，并给出完整代码：
+
+ipo_tracker/
+  app/
+    __init__.py
+    config.py
+    db.py
+    models.py
+    schemas.py
+
+    collectors/
+      __init__.py
+
+    parsers/
+      __init__.py
+
+    jobs/
+      __init__.py
+
+    utils/
+      __init__.py
+      logging.py
+
+  data/
+    raw/
+    exports/
+
+  scripts/
+    init_db.py
+
+  tests/
+    __init__.py
+
+  requirements.txt
+  README.md
+
+====================
+三、实现要求
+====================
+
+1. config.py
+- 使用 pydantic 或清晰配置类
+- 至少包含：
+  - BASE_DIR
+  - DATA_DIR
+  - RAW_DIR
+  - EXPORT_DIR
+  - DB_PATH
+  - DATABASE_URL
+  - LOG_LEVEL
+
+2. db.py
+- 创建 SQLAlchemy engine
+- 创建 SessionLocal
+- 创建 Base
+
+3. models.py
+先定义空的基础模型或最小可运行模型即可，不需要全部表，但至少保证数据库初始化流程可运行。
+你可以先定义一个简单的 Issuer 模型占位。
+
+4. app/utils/logging.py
+- 提供 get_logger(name) 函数
+- 日志格式清晰
+
+5. scripts/init_db.py
+- 能创建 SQLite 数据库
+- 能自动创建 data/raw 和 data/exports 目录
+- 能执行 Base.metadata.create_all
+
+6. requirements.txt
+请列出最小依赖
+
+7. README.md
+写清楚：
+- 如何创建虚拟环境
+- 如何安装依赖
+- 如何运行 init_db.py
+
+====================
+四、输出要求
+====================
+
+请直接输出完整代码。
+优先输出：
+1. requirements.txt
+2. README.md
+3. 各文件代码
+
+不要实现未来阶段的逻辑，不要写伪代码，要尽量可直接运行。
