@@ -25,6 +25,11 @@ class Settings(BaseSettings):
         return self.DATA_DIR / "raw"
 
     @property
+    def CACHE_DIR(self) -> Path:
+        """HTTP response cache directory."""
+        return self.DATA_DIR / "raw" / "cache"
+
+    @property
     def EXPORT_DIR(self) -> Path:
         """Export directory path."""
         return self.DATA_DIR / "exports"
@@ -38,6 +43,13 @@ class Settings(BaseSettings):
     def DATABASE_URL(self) -> str:
         """SQLAlchemy database URL."""
         return f"sqlite:///{self.DB_PATH}"
+
+    # HTTP client
+    HTTP_TIMEOUT: float = Field(default=30.0)
+    HTTP_RATE_LIMIT_DELAY: float = Field(default=1.0)  # seconds between requests
+    HTTP_MAX_RETRIES: int = Field(default=3)
+    # SEC EDGAR requires a descriptive User-Agent; override via .env or env var
+    SEC_USER_AGENT: str = Field(default="ipo-tracker research@example.com")
 
     # Logging
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")

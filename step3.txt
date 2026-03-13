@@ -1,0 +1,85 @@
+基于当前 ipo_tracker 项目，请只实现基础工具层：HTTP 请求、缓存、文本清洗、日期工具。不要实现 SEC/Nasdaq/NYSE 的业务逻辑。
+
+请只修改或新增以下文件：
+- app/utils/http.py
+- app/utils/text.py
+- app/utils/dates.py
+- app/config.py（如有必要）
+- requirements.txt（如有必要）
+- README.md（如有必要）
+
+====================
+一、目标
+====================
+
+为后续抓取和解析提供基础设施，包括：
+1. HTTP GET 请求封装
+2. 本地文件缓存
+3. 基础限速和重试
+4. HTML 文本清洗工具
+5. 日期解析和日期加天数工具
+
+====================
+二、技术要求
+====================
+
+使用：
+- httpx
+- tenacity
+- python-dateutil
+- pathlib
+
+====================
+三、需要实现的内容
+====================
+
+1. app/utils/http.py
+实现一个轻量 HTTP 客户端或工具函数，至少包括：
+
+- get_text(url: str, headers: dict | None = None, use_cache: bool = True) -> str
+- get_json(url: str, headers: dict | None = None, use_cache: bool = True) -> dict
+
+要求：
+- 支持超时
+- 支持简单重试
+- 支持基础限速
+- 支持本地缓存到 data/raw/cache/
+- 缓存文件名应基于 URL 生成稳定 hash
+- 当 use_cache=True 且缓存存在时，优先读缓存
+- 对非 200 响应抛出合理异常
+
+2. app/utils/text.py
+实现：
+- normalize_whitespace(text: str) -> str
+- strip_html_to_text(html: str) -> str
+- find_section(text: str, section_titles: list[str]) -> str | None
+
+要求：
+- strip_html_to_text 要适合 SEC HTML 文本预处理
+- find_section 可以先做简单版本，通过标题关键词定位附近片段
+
+3. app/utils/dates.py
+实现：
+- parse_date(value: str) -> date | None
+- add_days(value: str, days: int) -> str | None
+- today_str() -> str
+
+要求：
+- 尽量鲁棒
+- 输出统一 ISO 格式 YYYY-MM-DD
+
+====================
+四、实现要求
+====================
+
+1. 不要实现业务逻辑
+2. 工具函数要有类型注解和 docstring
+3. README 增加简短说明
+4. 代码应足够通用，方便后续 collectors 和 parsers 直接复用
+
+====================
+五、输出要求
+====================
+
+请输出完整代码。
+不要提前实现 SEC client 或 parser。
