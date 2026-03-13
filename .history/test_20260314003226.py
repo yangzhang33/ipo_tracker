@@ -1,8 +1,8 @@
 from app.collectors.sec import download_filing_html
 
-url = "https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/ef20060722_8k.htm"
+url = "https://www.sec.gov/Archives/edgar/data/1/000000000125000004/424b4.htm"
 html = download_filing_html(url)
 
 print(type(html))
 print(len(html))
-print(html[:300])
+print(html[:200])

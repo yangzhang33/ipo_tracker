@@ -1,0 +1,94 @@
+基于当前 ipo_tracker 项目，请只实现 SEC 数据采集层，不要实现 Nasdaq/NYSE，不要实现 parser，不要实现 job。
+
+请只修改或新增以下文件：
+- app/collectors/sec.py
+- app/config.py（如有必要）
+- README.md（如有必要）
+
+====================
+一、目标
+====================
+
+实现一个最小可用的 SEC collector，用于：
+1. 获取 company submissions JSON
+2. 构造 filing 文档 URL
+3. 下载 filing HTML
+4. 使用已有 http/cache 工具
+
+====================
+二、功能要求
+====================
+
+请实现以下函数：
+
+1. get_sec_headers() -> dict
+要求：
+- 返回适合 SEC 请求的 headers
+- 包含清晰 User-Agent
+- 尽量包含 Accept / Host 等基础头
+
+2. normalize_cik(cik: str) -> str
+要求：
+- 把 CIK 规范成 10 位数字字符串
+
+3. get_submissions_json(cik: str) -> dict
+要求：
+- 请求 data.sec.gov 的 submissions JSON
+- 使用现有缓存和 HTTP 工具
+- 返回 dict
+
+4. build_filing_primary_doc_url(cik: str, accession_no: str, primary_doc: str) -> str
+要求：
+- 根据 CIK、accession_no、primary_doc 构造 SEC filing 文档 URL
+- accession_no 需要去掉连接符用于 URL 路径
+
+5. download_filing_html(url: str) -> str
+要求：
+- 下载 filing HTML 文本
+- 使用现有缓存机制
+
+6. extract_recent_target_forms(submissions_json: dict) -> list[dict]
+要求：
+- 从 submissions JSON 中提取目标 forms：
+  - S-1
+  - S-1/A
+  - F-1
+  - F-1/A
+  - 424B4
+  - 424B1
+  - RW
+- 返回标准化列表，每项至少包含：
+  - accession_no
+  - form_type
+  - filing_date
+  - primary_doc
+  - primary_doc_url
+  - filing_index_url
+
+====================
+三、实现要求
+====================
+
+1. 不要在这里写入数据库
+2. 不要实现 job
+3. 不要实现 parser
+4. 对 submissions JSON 字段缺失要有容错
+5. 写清楚 docstring
+6. 保持模块独立、可测试
+
+====================
+四、测试/样例要求
+====================
+
+请附上一个最小可运行示例，展示：
+- 给定一个 CIK，调用 get_submissions_json
+- 提取目标 forms
+
+可以放在 README 或注释中，但不要写复杂测试框架
+
+====================
+五、输出要求
+====================
+
+请输出完整代码。
+不要提前做下一阶段内容。

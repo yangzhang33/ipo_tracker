@@ -1,5 +1,58 @@
 # Changelog
 
+## [Step 4] - 2026-03-13 — SEC 数据采集层
+
+### 新增文件
+
+#### `app/collectors/sec.py`
+
+实现 6 个公开函数，不写数据库、不实现 job/parser，模块完全独立可测试。
+
+- **`get_sec_headers() -> dict`**
+  - 返回 SEC EDGAR 专用请求头：`User-Agent`（从 `settings.SEC_USER_AGENT` 读取）、`Accept`、`Accept-Encoding`
+  - 调用方可用 `headers` 参数覆盖任意字段
+
+- **`normalize_cik(cik) -> str`**
+  - 将任意格式 CIK（字符串或整数）规范为 10 位零填充字符串
+  - e.g. `320193` → `"0000320193"`
+
+- **`get_submissions_json(cik, use_cache) -> dict`**
+  - 拼接 URL `https://data.sec.gov/submissions/CIK{cik10}.json`
+  - 调用 `get_json`（复用 Step 3 缓存 + 重试 + 限速机制）
+  - `use_cache=True` 默认开启
+
+- **`build_filing_primary_doc_url(cik, accession_no, primary_doc) -> str`**
+  - 构造 `https://www.sec.gov/Archives/edgar/data/{cik_int}/{accession_no_no_dashes}/{primary_doc}`
+  - accession_no 去掉连字符用于路径；CIK 取整数形式（去掉前置零）
+
+- **`build_filing_index_url(cik, accession_no) -> str`**（内部辅助，供 `extract_recent_target_forms` 使用）
+  - 构造 filing 归档目录 URL
+
+- **`download_filing_html(url, use_cache) -> str`**
+  - 调用 `get_text`（复用 Step 3 缓存机制）下载 filing HTML
+  - `use_cache=True` 默认开启
+
+- **`extract_recent_target_forms(submissions_json) -> list[dict]`**
+  - 从 `filings.recent` 并行数组中提取目标表单
+  - 目标类型：`S-1 | S-1/A | F-1 | F-1/A | 424B4 | 424B1 | RW`
+  - 每项字段：`accession_no`、`form_type`、`filing_date`、`primary_doc`、`primary_doc_url`、`filing_index_url`
+  - 字段缺失容错（`_safe_get` 防止 IndexError）
+  - 结果按 `filing_date` 降序排列（最新在前）
+  - 仅覆盖 `filings.recent` 块（约最近 1000 条），`filings.files` 留待后续阶段
+
+### 不变文件
+- `app/config.py` — 无需修改（`SEC_USER_AGENT` 已在 Step 3 修复中添加）
+- `app/utils/` — 无需修改
+- `app/models.py` / `app/schemas.py` / `app/db.py` — 无需修改
+- `README.md` — 无需修改
+
+### 验证
+- `normalize_cik` 单元断言通过
+- Apple CIK `320193`：submissions JSON 正常拉取，0 条目标表单（符合预期，Apple 1980 年上市）
+- Reddit CIK `1713445`：正确提取 5 条目标表单（S-1 + 3×S-1/A + 424B4，2024 年 IPO）
+
+---
+
 ## [Step 3] - 2026-03-11 — 基础工具层
 
 ### 新增文件
