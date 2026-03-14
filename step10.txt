@@ -1,0 +1,98 @@
+基于当前 ipo_tracker 项目，请只实现 CSV 导出阶段。不要实现总入口，不要实现新的抓取逻辑。
+
+请只修改或新增以下文件：
+- app/jobs/export_reports.py
+- README.md（如有必要）
+
+====================
+一、目标
+====================
+
+从数据库中读取已有数据，导出 3 个 CSV 文件到 data/exports/：
+
+1. upcoming_ipos.csv
+2. recent_ipos.csv
+3. upcoming_unlocks.csv
+
+====================
+二、导出要求
+====================
+
+1. upcoming_ipos.csv
+字段至少包括：
+- company_name
+- cik
+- ticker
+- exchange
+- filing_status
+- price_range_low
+- price_range_high
+- offer_price
+- pricing_date
+- expected_trade_date
+- shares_offered_total
+- shares_primary
+- shares_secondary
+- greenshoe_shares
+- bookrunners
+- latest_prospectus_url
+
+筛选建议：
+- issuer.status in ('candidate', 'filed', 'priced')
+- 最近 60 天有相关 filing
+
+2. recent_ipos.csv
+字段至少包括：
+- company_name
+- ticker
+- exchange
+- offer_price
+- pricing_date
+- trade_date
+- shares_offered_total
+- shares_outstanding_post_ipo
+- free_float_at_ipo
+- float_ratio
+- lockup_days
+- lockup_end_date
+
+筛选建议：
+- offer_price 非空
+- pricing_date 在最近 30 天内
+
+3. upcoming_unlocks.csv
+字段至少包括：
+- company_name
+- ticker
+- offer_price
+- trade_date
+- lockup_days
+- lockup_end_date
+- is_staged_unlock
+- unlock_notes
+- unlock_shares_estimate
+- source_filing_url
+
+筛选建议：
+- lockup_end_date 在未来 30 天内
+
+====================
+三、实现要求
+====================
+
+1. 使用 pandas 导出
+2. 如果某些字段没有数据，保留空值
+3. 路径自动写到 data/exports/
+4. 导出函数：
+- export_reports() -> dict
+
+返回值可包含：
+- exported_files
+- row_counts
+
+====================
+四、输出要求
+====================
+
+请输出完整代码。
+不要实现总入口。

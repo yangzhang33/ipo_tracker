@@ -1,0 +1,2 @@
+company_name,ticker,offer_price,trade_date,lockup_days,lockup_end_date,is_staged_unlock,unlock_notes,unlock_shares_estimate,source_filing_url
+Silver Bow Mining Corp.,SBMT,3.1,,30,2026-04-05,False,,,https://www.sec.gov/Archives/edgar/data/2067674/000153949726000886/n5138_x9-s1a.htm

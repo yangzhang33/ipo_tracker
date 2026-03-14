@@ -1,5 +1,54 @@
 # Changelog
 
+## [Step 10] - 2026-03-14 — CSV 导出报表
+
+### 新增文件
+
+#### `app/jobs/export_reports.py`
+
+- **`export_reports() -> dict`**
+  - 从数据库读取数据，导出 3 个 CSV 到 `data/exports/`（目录不存在时自动创建）
+  - 返回 `{exported_files: [...], row_counts: {filename: n}}`
+  - 支持 `python -m app.jobs.export_reports` 直接运行
+
+三个内部函数及其筛选逻辑：
+
+| 函数 | 输出文件 | 筛选条件 |
+|------|----------|----------|
+| `_export_upcoming_ipos` | `upcoming_ipos.csv` | `issuer.status in (candidate, filed, priced)` 且最近 60 天内有 filing |
+| `_export_recent_ipos` | `recent_ipos.csv` | `offer_price IS NOT NULL` 且 `pricing_date >= 今天 - 30 天` |
+| `_export_upcoming_unlocks` | `upcoming_unlocks.csv` | `lockup_end_date` 在今后 30 天内 |
+
+字段来源说明：
+- `upcoming_ipos.csv`：issuer + 最近 filing（`latest_prospectus_url`）+ 最新 offering 行
+- `recent_ipos.csv`：offering + capitalization（最新 parsed_at）+ lockup（最新 parsed_at）
+- `upcoming_unlocks.csv`：lockup + issuer + 最新 offering（`offer_price`, `trade_date`）+ filing（`source_filing_url` 取 lockup 关联的 filing）
+
+所有字段缺失时保留空值（pandas NaN → 空列），不抛出错误。
+
+### 修改文件
+
+#### `requirements.txt`
+- 新增 `pandas>=2.0.0`
+
+### 不变文件
+- 所有 parser、collector、model — 无需修改
+
+### 验证（数据库含 Reddit / Silver Bow / PayPay 数据）
+
+```
+upcoming_ipos.csv    — 2 rows
+recent_ipos.csv      — 0 rows  (无 pricing_date 在 30 天内的数据)
+upcoming_unlocks.csv — 1 rows
+```
+
+运行命令：
+```
+python -m app.jobs.export_reports
+```
+
+---
+
 ## [Step 9] - 2026-03-14 — Lock-Up 解析
 
 ### 新增文件

@@ -1,0 +1,3 @@
+company_name,cik,ticker,exchange,filing_status,price_range_low,price_range_high,offer_price,pricing_date,expected_trade_date,shares_offered_total,shares_primary,shares_secondary,greenshoe_shares,bookrunners,latest_prospectus_url
+PayPay Corporation,0002080845,PAYP,NASDAQ,filed,,,,,,,,,,,https://www.sec.gov/Archives/edgar/data/2080845/000208084526000001/d941409d424b4.htm
+Silver Bow Mining Corp.,0002067674,SBMT,NYSE American Exchange,filed,2.5,4.2,3.1,,,,,,555555.0,,https://www.sec.gov/Archives/edgar/data/2067674/000153949726000886/n5138_x9-s1a.htm

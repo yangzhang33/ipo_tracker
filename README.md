@@ -124,6 +124,21 @@ Done — fetched=115  inserted=115  updated=0  skipped=0
 > python scripts/init_db.py
 > ```
 
+## 导出 CSV 报表
+
+```bash
+conda activate ipo_tracker
+python -m app.jobs.export_reports
+```
+
+输出文件写入 `data/exports/`：
+
+| 文件 | 内容 | 筛选条件 |
+|------|------|----------|
+| `upcoming_ipos.csv` | 即将上市的 IPO | status in (candidate/filed/priced) 且 60 天内有 filing |
+| `recent_ipos.csv` | 近期已定价的 IPO | pricing_date 在过去 30 天内 |
+| `upcoming_unlocks.csv` | 即将到期的锁定期 | lockup_end_date 在未来 30 天内 |
+
 ## 运行 Lock-Up 解析任务
 
 ```bash
@@ -154,4 +169,5 @@ python -m app.jobs.parse_lockups --force
 - [x] 第七阶段：最佳 filing 选择器
 - [x] 第八阶段：Prospectus 字段解析（offering + capitalization）
 - [x] 第九阶段：Lock-up 解析（lockup_days、日期、staged unlock 检测）
-- [ ] 后续阶段：CSV 导出报表、总入口脚本
+- [x] 第十阶段：CSV 导出报表（3 个 CSV 文件）
+- [ ] 后续阶段：总入口脚本
