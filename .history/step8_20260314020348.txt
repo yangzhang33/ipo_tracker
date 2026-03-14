@@ -1,0 +1,97 @@
+基于当前 ipo_tracker 项目，请只实现“prospectus 基础字段解析”的第一版。不要实现 lock-up，不要实现导出，不要实现总入口。
+
+请只修改或新增以下文件：
+- app/parsers/prospectus_parser.py
+- app/parsers/capitalization_parser.py
+- app/jobs/parse_offering_data.py
+- tests/test_prospectus_parser.py（或最小样例）
+- README.md（如有必要）
+
+====================
+一、目标
+====================
+
+从最佳 filing 的 HTML 文本中提取 IPO 基础字段，并写入 offerings / capitalization 表。
+
+第一版只实现最小可用字段：
+- offer_price
+- shares_offered_total
+- greenshoe_shares
+- shares_outstanding_post_ipo
+- bookrunners
+
+第二批字段如果你觉得稳定，也可以顺便实现：
+- price_range_low
+- price_range_high
+- shares_primary
+- shares_secondary
+- shares_outstanding_pre_ipo
+- gross_proceeds
+- fully_diluted_shares
+
+但请优先保证第一批字段质量。
+
+====================
+二、实现要求
+====================
+
+1. app/parsers/prospectus_parser.py
+请实现独立函数：
+- extract_offer_price(text: str) -> float | None
+- extract_shares_offered_total(text: str) -> float | None
+- extract_greenshoe_shares(text: str) -> float | None
+- extract_bookrunners(text: str) -> str | None
+- extract_price_range(text: str) -> tuple[float | None, float | None]
+- extract_shares_primary_secondary(text: str) -> tuple[float | None, float | None]
+
+2. app/parsers/capitalization_parser.py
+请实现独立函数：
+- extract_shares_outstanding_post_ipo(text: str) -> float | None
+- extract_shares_outstanding_pre_ipo(text: str) -> float | None
+- extract_fully_diluted_shares(text: str) -> float | None
+
+3. app/jobs/parse_offering_data.py
+实现函数：
+- parse_offering_data() -> dict
+
+逻辑：
+- 查询每个 issuer 的 filings
+- 用 filing_locator 选最佳 filing
+- 下载 HTML
+- 转为纯文本
+- 调用 parser 提取字段
+- 写入 offerings / capitalization
+- 允许覆盖旧值，但优先以更高优先级 filing 结果为准
+
+====================
+三、解析策略要求
+====================
+
+1. 优先处理 HTML 文本，不做 PDF，不做 OCR
+2. 使用已有 strip_html_to_text 和 normalize_whitespace
+3. 优先从这些 section 附近匹配：
+- The Offering
+- Capitalization
+- Dilution
+- Underwriting
+- Shares Eligible for Future Sale
+
+4. 每个字段的规则尽量独立
+5. 找不到就返回 None，不要瞎猜
+6. 不要写成一个巨大正则黑盒
+
+====================
+四、测试要求
+====================
+
+请提供最小测试样例，至少覆盖：
+- offer_price 的典型句式
+- greenshoe 的典型句式
+- shares_outstanding_post_ipo 的典型句式
+
+====================
+五、输出要求
+====================
+
+请输出完整代码。
+不要提前实现 lock-up。

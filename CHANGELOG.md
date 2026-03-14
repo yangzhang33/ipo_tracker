@@ -1,5 +1,89 @@
 # Changelog
 
+## [Step 8] - 2026-03-14 — Prospectus 字段解析
+
+### 新增文件
+
+#### `app/parsers/prospectus_parser.py`
+
+共用辅助函数：
+- **`_first(patterns, text, group)`** — 遍历 pattern 列表取第一个匹配，None-safe
+- **`_parse_number(raw)`** — 处理逗号/小数/million/billion 后缀，返回 float 或 None
+
+主要解析函数（均接受 `strip_html_to_text()` 输出的纯文本）：
+
+| 函数 | 目标字段 | 典型句式 |
+|------|----------|----------|
+| `extract_offer_price` | offer_price | "offering price per share ... is $34.00" |
+| `extract_price_range` | price_low, price_high | "$25.00 to $31.50 per share" |
+| `extract_shares_offered_total` | shares_offered_total | "Company Inc. is offering 15,276,527 shares of its..." |
+| `extract_shares_primary_secondary` | shares_primary, shares_secondary | "Company is offering X shares... selling stockholders are offering Y shares" |
+| `extract_greenshoe_shares` | greenshoe_shares | "X shares ... to cover over-allotment" / "option to purchase X additional shares" |
+| `extract_bookrunners` | bookrunners | cover-page ALL-CAPS block between "deliver the shares" and "Prospectus dated" |
+
+每个函数有 2–4 个 fallback pattern；找不到返回 None，不猜测。
+
+#### `app/parsers/capitalization_parser.py`
+
+| 函数 | 目标字段 | 策略 |
+|------|----------|------|
+| `extract_shares_outstanding_post_ipo` | shares_outstanding_post_ipo | 优先匹配多 class 合计（最大值）；fallback 取所有"outstanding after offering"中最大数 |
+| `extract_shares_outstanding_pre_ipo` | shares_outstanding_pre_ipo | "X shares outstanding as of [date]" 在 offering 前 |
+| `extract_fully_diluted_shares` | fully_diluted_shares | "X shares ... on a fully diluted basis" |
+
+#### `app/jobs/parse_offering_data.py`
+
+- **`parse_offering_data(force=False) -> dict`**
+  - 对所有 issuer 查询 filings → `select_best_filing` → 下载 HTML → `strip_html_to_text` → 调用 parsers
+  - **`shares_offered_total` 计算优先级**：primary + secondary（相加）> 直接提取 > primary 单独值
+  - `gross_proceeds` = `offer_price × shares_offered_total`（均不为 None 时自动计算）
+  - `float_ratio` = `shares_offered_total / shares_outstanding_post_ipo`（均不为 None 时自动计算）
+  - Upsert offerings / capitalization：`_set_if_not_none` — 有解析结果就覆盖，None 不动
+  - 解析完成后标记 `filing.is_parsed = 1`
+  - `force=True` 强制重新解析已标记的 filing（`--force` CLI flag）
+  - 每个 issuer 独立 try/except，失败计入 `failed`
+  - 返回 `{issuer_count, parsed, skipped, failed}`
+  - 支持 `python -m app.jobs.parse_offering_data [--force]`
+
+#### `tests/test_prospectus_parser.py`
+
+18 个单元测试，覆盖全部解析函数：
+
+- `offer_price`：424B4 句式、price to public、None
+- `price_range`：to 连接、between...and、None
+- `shares_offered_total`：cover page 句式、None
+- `shares_primary_secondary`：公司+selling stockholder 句式
+- `greenshoe`：to cover 句式、option to purchase 句式、None
+- `bookrunners`：ALL-CAPS cover-page block
+- `shares_outstanding_post_ipo`：多 class 合计、简单句式、None
+- `shares_outstanding_pre_ipo`：as of date 句式
+- `fully_diluted_shares`：fully diluted basis 句式
+
+### 不变文件
+- `app/parsers/filing_locator.py` — 无需修改
+- `app/collectors/` / `app/jobs/sync_sec_filings.py` — 无需修改
+- `app/models.py` / `app/schemas.py` — 无需修改
+
+### 已知限制（v1）
+- `shares_outstanding_pre_ipo` 对 Reddit 424B4 返回 None（没有简单 "X shares outstanding as of" 句式）
+- `fully_diluted_shares` 对 Reddit 424B4 返回 None（数字在 GAAP 表格中，纯文本解析困难）
+- bookrunners 模式依赖 cover-page 结构，非标准 prospectus 格式可能失效
+
+### 验证（Reddit Inc. 424B4 实测）
+
+| 字段 | 期望 | 实测 |
+|------|------|------|
+| offer_price | 34.0 | ✓ 34.0 |
+| shares_offered_total | 22,000,000 | ✓ 22,000,000 |
+| shares_primary | 15,276,527 | ✓ 15,276,527 |
+| shares_secondary | 6,723,473 | ✓ 6,723,473 |
+| greenshoe_shares | 3,300,000 | ✓ 3,300,000 |
+| gross_proceeds | 748,000,000 | ✓ 748,000,000 |
+| shares_outstanding_post_ipo | 158,993,090 | ✓ 158,993,090 |
+| bookrunners | 15 banks | ✓ 15 banks |
+
+---
+
 ## [Step 7] - 2026-03-14 — 最佳 Filing 选择器
 
 ### 新增文件

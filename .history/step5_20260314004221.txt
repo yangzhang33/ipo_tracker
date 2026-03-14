@@ -1,0 +1,79 @@
+基于当前 ipo_tracker 项目，请只实现“IPO 候选公司发现”这一阶段，不要实现 SEC filings 同步，不要实现 parser。
+
+请只修改或新增以下文件：
+- app/collectors/nasdaq.py
+- app/collectors/nyse.py
+- app/jobs/discover_candidates.py
+- app/models.py（仅在确有必要时小改）
+- app/schemas.py（仅在确有必要时小改）
+- README.md（如有必要）
+
+====================
+一、目标
+====================
+
+从 Nasdaq IPO 页面和 NYSE IPO Center 页面抓取 IPO 候选公司，并写入 issuers 表。
+
+第一版只要求尽量抓到：
+- company_name
+- ticker
+- exchange
+- 页面上的日期相关字段（如果能抓到）
+- source_url
+
+如果页面结构不稳定，允许只抓部分字段，但代码结构必须清晰。
+
+====================
+二、实现要求
+====================
+
+1. app/collectors/nasdaq.py
+实现函数：
+- fetch_nasdaq_candidates() -> list[dict]
+
+2. app/collectors/nyse.py
+实现函数：
+- fetch_nyse_candidates() -> list[dict]
+
+每个候选 dict 至少包含：
+- company_name
+- ticker
+- exchange
+- source_url
+- raw_date_text（可选）
+
+3. app/jobs/discover_candidates.py
+实现函数：
+- discover_candidates() -> dict
+
+功能：
+- 调用 Nasdaq 和 NYSE collector
+- 合并候选列表
+- 以 company_name + ticker 做简单去重
+- 写入 issuers 表
+- 默认 status = candidate
+- 已存在则跳过或更新基础字段
+
+返回值可包含：
+- total_fetched
+- inserted
+- updated
+- skipped
+
+====================
+三、工程要求
+====================
+
+1. 使用已有 db session
+2. 使用已有 logger
+3. 不要在这一阶段处理 CIK
+4. 不要在这一阶段处理 filings
+5. 代码要容错，单个 source 失败不能导致整个 job 崩掉
+6. 给 README 增加这一阶段的运行方式，例如如何单独运行 discover_candidates
+
+====================
+四、输出要求
+====================
+
+请输出完整代码。
+只做这一阶段，不要提前实现 SEC filings 同步。

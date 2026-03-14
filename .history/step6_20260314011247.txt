@@ -1,0 +1,69 @@
+基于当前 ipo_tracker 项目，请只实现“从 SEC 同步 filings 到数据库”这一阶段。不要实现 parser，不要实现导出。
+
+请只修改或新增以下文件：
+- app/jobs/sync_sec_filings.py
+- app/collectors/sec.py（仅在必要时补充小函数）
+- app/models.py（仅在必要时小改）
+- README.md（如有必要）
+
+====================
+一、目标
+====================
+
+对 issuers 中“已经有 CIK 的公司”，拉取 SEC submissions，并把目标 forms 写入 filings 表。
+
+目标 forms：
+- S-1
+- S-1/A
+- F-1
+- F-1/A
+- 424B4
+- 424B1
+- RW
+
+====================
+二、实现要求
+====================
+
+实现文件：
+app/jobs/sync_sec_filings.py
+
+实现函数：
+- sync_sec_filings() -> dict
+
+逻辑：
+1. 查询 issuers 表中 cik 不为空的公司
+2. 对每个 issuer 调用 SEC collector 获取 submissions JSON
+3. 提取目标 forms
+4. 写入 filings 表
+5. 避免重复写入
+6. 根据 filings 更新 issuer.status：
+
+- 出现 S-1 或 F-1 -> 至少设为 filed
+- 出现 424B4 且后续将来能拿到 offer_price 时再设为 priced
+  这一阶段先不要依赖 offer_price，可暂时只做到：
+  - 出现 424B4 -> 设为 filed 或保留现状
+- 出现 RW -> 设为 withdrawn
+
+返回值至少包含：
+- issuer_count
+- filings_inserted
+- filings_skipped
+- filings_failed
+
+====================
+三、实现边界
+====================
+
+1. 不要在这一阶段解析 filing HTML
+2. 不要在这一阶段写 offerings / capitalization / lockups
+3. 不要实现自动 CIK 匹配复杂逻辑
+4. 可以假设 CIK 已由用户手动填入数据库
+5. 如有必要，可提供一个简单辅助函数，便于按 ticker 或 company_name 查询未绑定 CIK 的 issuer，但不要做复杂自动搜索
+
+====================
+四、输出要求
+====================
+
+请输出完整代码。
+只做这个阶段。
