@@ -1,5 +1,49 @@
 # Changelog
 
+## [Step 11] - 2026-03-14 — 每日总入口脚本
+
+### 新增文件
+
+#### `scripts/run_daily.py`
+
+- **`main()`** — 按固定顺序执行 5 个 job，打印每步开始/结束日志，最后输出汇总
+- 执行顺序：`discover_candidates` → `sync_sec_filings` → `parse_offering_data` → `parse_lockups` → `export_reports`
+- 每步用独立 try/except 包裹，单步失败记录异常后继续执行后续步骤
+- Import 失败（模块缺失）也被捕获，不会中断整个流程
+- 汇总输出：每步 OK/FAILED 状态 + 返回值；最后列出导出的 CSV 文件和行数
+- 用 `sys.path` 注入确保从任意目录调用 `python scripts/run_daily.py` 均可正常导入 `app.*`
+- 支持直接运行：`python scripts/run_daily.py`
+
+### 修改文件
+
+#### `README.md`
+- 重写为完整操作手册，含：
+  - 安装 / 初始化数据库
+  - 每日全流程快速开始（`run_daily.py`）
+  - 手动填入 CIK 方法
+  - 单独运行各 Job 的命令表
+  - CSV 导出文件说明
+  - 当前进度列表
+
+### 不变文件
+- 所有 job、parser、collector、model — 无需修改
+
+### 验证
+
+```text
+python scripts/run_daily.py
+
+run_daily SUMMARY  (8.1s)
+  discover_candidates       OK  {'total_fetched': 115, 'inserted': 0, ...}
+  sync_sec_filings          OK  {'issuer_count': 3, 'filings_skipped': 12, ...}
+  parse_offering_data       OK  {'issuer_count': 116, 'parsed': 0, ...}
+  parse_lockups             OK  {'issuer_count': 116, 'parsed': 0, ...}
+  export_reports            OK  {'row_counts': {'upcoming_ipos.csv': 2, ...}}
+All steps completed successfully.
+```
+
+---
+
 ## [Step 10] - 2026-03-14 — CSV 导出报表
 
 ### 新增文件

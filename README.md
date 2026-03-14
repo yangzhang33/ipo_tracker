@@ -32,15 +32,27 @@ python scripts/init_db.py
 ```
 
 这将创建：
+
 - `data/ipo_tracker.db`：SQLite 数据库（含全部 5 张表）
 - `data/raw/`：原始数据缓存目录
 - `data/exports/`：CSV 导出目录
 
-> **升级提示**：如果从第一阶段升级，建议先删除旧数据库再重新初始化：
+> **升级提示**：如果从旧版升级，建议先删除旧数据库再重新初始化：
+>
 > ```bash
 > rm data/ipo_tracker.db
 > python scripts/init_db.py
 > ```
+
+## 快速开始：每日全流程
+
+```bash
+conda activate ipo_tracker
+python scripts/run_daily.py
+```
+
+脚本依次执行 5 个步骤，每步打印开始/结束日志，最后输出汇总。
+单步失败不会中断后续步骤。
 
 ## 数据库表结构
 
@@ -54,23 +66,23 @@ python scripts/init_db.py
 
 ## 项目结构
 
-```
+```text
 ipo_tracker/
 ├── app/
 │   ├── config.py          # 配置（路径、数据库 URL、日志级别）
 │   ├── db.py              # SQLAlchemy engine / SessionLocal / Base
 │   ├── models.py          # 全部 SQLAlchemy 模型（5 张表）
 │   ├── schemas.py         # Pydantic 读写 schema
-│   ├── collectors/        # 数据采集器（待实现）
-│   ├── parsers/           # 解析器（待实现）
-│   ├── jobs/              # 定时任务（待实现）
-│   └── utils/
-│       └── logging.py     # get_logger(name) 工具函数
+│   ├── collectors/        # Nasdaq / NYSE / SEC 采集器
+│   ├── parsers/           # filing 选择、prospectus / lockup 解析
+│   ├── jobs/              # 各阶段 job 函数
+│   └── utils/             # HTTP / 文本 / 日期 / 日志工具
 ├── data/
 │   ├── raw/               # 原始数据缓存
 │   └── exports/           # 导出的 CSV 文件
 ├── scripts/
-│   └── init_db.py         # 数据库初始化脚本
+│   ├── init_db.py         # 数据库初始化脚本
+│   └── run_daily.py       # 每日全流程入口
 ├── tests/
 ├── CHANGELOG.md
 └── requirements.txt
@@ -92,71 +104,32 @@ for hit in search_edgar_company("Reddit"):
 UPDATE issuers SET cik = '1713445' WHERE ticker = 'RDDT';
 ```
 
-## 运行 SEC Filings 同步任务
+## 单独运行各 Job
+
+| Job | 命令 |
+|-----|------|
+| 发现 IPO 候选 | `python -m app.jobs.discover_candidates` |
+| 同步 SEC filings | `python -m app.jobs.sync_sec_filings` |
+| 解析发行数据 | `python -m app.jobs.parse_offering_data` |
+| 解析 Lock-up | `python -m app.jobs.parse_lockups` |
+| 导出 CSV 报表 | `python -m app.jobs.export_reports` |
+
+强制重新解析（覆盖已有记录）：
 
 ```bash
-conda activate ipo_tracker
-python -m app.jobs.sync_sec_filings
+python -m app.jobs.parse_offering_data --force
+python -m app.jobs.parse_lockups --force
 ```
 
-输出示例：
+## CSV 导出文件
 
-```
-Done — issuers=1  inserted=5  skipped=0  failed=0
-```
-
-## 运行 IPO 候选发现任务
-
-```bash
-conda activate ipo_tracker
-python -m app.jobs.discover_candidates
-```
-
-输出示例：
-
-```
-Done — fetched=115  inserted=115  updated=0  skipped=0
-```
-
-> **首次运行或模型升级后**需重置数据库：
-> ```bash
-> rm data/ipo_tracker.db
-> python scripts/init_db.py
-> ```
-
-## 导出 CSV 报表
-
-```bash
-conda activate ipo_tracker
-python -m app.jobs.export_reports
-```
-
-输出文件写入 `data/exports/`：
+文件写入 `data/exports/`：
 
 | 文件 | 内容 | 筛选条件 |
 |------|------|----------|
 | `upcoming_ipos.csv` | 即将上市的 IPO | status in (candidate/filed/priced) 且 60 天内有 filing |
 | `recent_ipos.csv` | 近期已定价的 IPO | pricing_date 在过去 30 天内 |
 | `upcoming_unlocks.csv` | 即将到期的锁定期 | lockup_end_date 在未来 30 天内 |
-
-## 运行 Lock-Up 解析任务
-
-```bash
-conda activate ipo_tracker
-python -m app.jobs.parse_lockups
-```
-
-输出示例：
-
-```
-Done — issuers=1  parsed=1  skipped=0  failed=0
-```
-
-加 `--force` 强制重新解析已有记录：
-
-```bash
-python -m app.jobs.parse_lockups --force
-```
 
 ## 当前进度
 
@@ -170,4 +143,4 @@ python -m app.jobs.parse_lockups --force
 - [x] 第八阶段：Prospectus 字段解析（offering + capitalization）
 - [x] 第九阶段：Lock-up 解析（lockup_days、日期、staged unlock 检测）
 - [x] 第十阶段：CSV 导出报表（3 个 CSV 文件）
-- [ ] 后续阶段：总入口脚本
+- [x] 第十一阶段：每日总入口脚本（`scripts/run_daily.py`）
