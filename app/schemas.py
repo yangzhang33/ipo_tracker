@@ -15,6 +15,7 @@ class IssuerCreate(BaseModel):
     country: Optional[str] = None
     is_foreign_issuer: bool = False
     status: str = "candidate"
+    source_url: Optional[str] = None
 
 
 class IssuerRead(IssuerCreate):

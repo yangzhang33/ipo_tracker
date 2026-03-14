@@ -26,6 +26,7 @@ class Issuer(Base):
     country = Column(Text, nullable=True)
     is_foreign_issuer = Column(Boolean, default=False)
     status = Column(Text, default="candidate")
+    source_url = Column(Text, nullable=True)   # page where this candidate was discovered
     created_at = Column(Text, nullable=True)
     updated_at = Column(Text, nullable=True)
 

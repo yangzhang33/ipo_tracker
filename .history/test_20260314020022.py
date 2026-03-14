@@ -40,5 +40,3 @@ filings = [
 ]
 
 print(select_best_filing(filings))
-
-print(select_best_filing([]))

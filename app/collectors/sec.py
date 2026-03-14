@@ -236,6 +236,65 @@ def extract_recent_target_forms(submissions_json: dict) -> list[dict]:
     return results
 
 
+# ── CIK lookup helper ─────────────────────────────────────────────────────────
+
+_COMPANY_TICKERS_URL = (
+    "https://www.sec.gov/files/company_tickers_exchange.json"
+)
+
+
+def search_edgar_company(query: str, max_results: int = 10) -> list[dict]:
+    """
+    Search the SEC EDGAR company list by ticker or company name.
+
+    Downloads ``company_tickers_exchange.json`` from SEC (cached after the
+    first call) and does a case-insensitive substring search across both
+    the ticker symbol and the company name.
+
+    Useful for manually looking up a CIK before running ``sync_sec_filings``.
+
+    Example::
+
+        from app.collectors.sec import search_edgar_company
+        for hit in search_edgar_company("Reddit"):
+            print(hit)
+        # {"cik": "0001713445", "name": "Reddit, Inc.", "ticker": "RDDT", "exchange": "Nasdaq"}
+
+    Args:
+        query: Search string (matched against name and ticker).
+        max_results: Maximum number of results to return (default 10).
+
+    Returns:
+        List of dicts with keys: ``cik``, ``name``, ``ticker``, ``exchange``.
+    """
+    data = get_json(
+        _COMPANY_TICKERS_URL,
+        headers=get_sec_headers(),
+        use_cache=True,
+    )
+    fields: list[str] = data.get("fields", [])
+    rows: list[list]  = data.get("data", [])
+
+    query_lower = query.strip().lower()
+    results: list[dict] = []
+
+    for row in rows:
+        entry = dict(zip(fields, row))
+        name   = str(entry.get("name",   "") or "").lower()
+        ticker = str(entry.get("ticker", "") or "").lower()
+        if query_lower in name or query_lower == ticker:
+            results.append({
+                "cik":      normalize_cik(entry.get("cik", 0)),
+                "name":     entry.get("name"),
+                "ticker":   entry.get("ticker"),
+                "exchange": entry.get("exchange"),
+            })
+            if len(results) >= max_results:
+                break
+
+    return results
+
+
 # ── Internal ──────────────────────────────────────────────────────────────────
 
 def _safe_get(lst: list, index: int):

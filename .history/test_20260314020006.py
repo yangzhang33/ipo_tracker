@@ -26,19 +26,3 @@ filings = [
 ]
 
 print(select_best_filing(filings))
-
-filings = [
-    {"form_type": "424B1", "filing_date": "2026-03-07"},
-    {"form_type": "424B4", "filing_date": "2026-03-08"},
-]
-
-print(select_best_filing(filings))
-
-filings = [
-    {"form_type": "S-1/A", "filing_date": "2026-03-05"},
-    {"form_type": "S-1/A", "filing_date": "2026-03-08"},
-]
-
-print(select_best_filing(filings))
-
-print(select_best_filing([]))

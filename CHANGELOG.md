@@ -1,5 +1,163 @@
 # Changelog
 
+## [Step 7] - 2026-03-14 — 最佳 Filing 选择器
+
+### 新增文件
+
+#### `app/parsers/filing_locator.py`
+
+- **新增** `select_best_filing(filings: list) -> Any | None`
+  - 输入：Filing ORM 对象列表或 dict 列表，空列表返回 None
+  - 优先级梯（固定，从高到低）：
+    1. `424B4`
+    2. `424B1`
+    3. `S-1/A` / `F-1/A`（同组）
+    4. `S-1` / `F-1`（同组）
+  - 同一梯内按 `filing_date` 取最新（字符串 ISO 比较，None 退化为 `""`）
+  - 所有 form_type 均不在优先级表中时返回 None
+  - **`_get(filing, field)`** 内部辅助：统一读取 dict 和 ORM 对象的字段，使函数与输入类型无关
+  - 无外部依赖，纯 Python 标准库
+
+#### `tests/test_filing_locator.py`
+
+10 个测试用例，覆盖规范要求的全部场景：
+
+| 测试 | 验证点 |
+|------|--------|
+| `test_empty_returns_none` | 空列表 → None |
+| `test_only_s1_selects_s1` | 仅 S-1 → 选 S-1 |
+| `test_s1a_beats_s1` | 有 S-1/A → 优先 S-1/A |
+| `test_424b4_beats_s1a` | 有 424B4 → 优先 424B4 |
+| `test_424b4_beats_424b1` | 424B4 > 424B1 |
+| `test_latest_date_wins_within_tier` | 同级多个 → 取最新日期 |
+| `test_f1_selected_when_no_s1` | F-1 路径正常 |
+| `test_f1a_beats_f1` | F-1/A > F-1 |
+| `test_unrecognised_forms_return_none` | 无关表单 → None |
+| `test_orm_like_object` | ORM 属性对象兼容 |
+
+### 修改文件
+
+#### `requirements.txt`
+- 新增 `pytest>=9.0.0`
+
+### 不变文件
+- `app/models.py` / `app/schemas.py` / `app/db.py` — 无需修改
+- `app/jobs/` — 无需修改
+- `app/collectors/` — 无需修改
+
+### 验证
+
+```
+pytest tests/test_filing_locator.py -v
+10 passed in 0.01s
+```
+
+---
+
+## [Step 6] - 2026-03-14 — SEC Filings 同步
+
+### 新增文件
+
+#### `app/jobs/sync_sec_filings.py`
+
+- **新增** `sync_sec_filings(use_cache=True) -> dict`
+  - 查询 `issuers` 表中 `cik IS NOT NULL` 的所有公司
+  - 对每个 issuer 调用 `get_submissions_json(cik)` + `extract_recent_target_forms()`
+  - 按 unique 约束 `(issuer_id, accession_no, form_type)` 判重，新则 INSERT，旧则 skip
+  - 每个 issuer 独立 try/except + commit，单个失败不中断其余处理
+  - **`_derive_status(current, form_types)`** 内部辅助：
+    - `RW` → `"withdrawn"`（最高优先级，始终覆盖）
+    - `"priced"` / `"trading"` → 保持不降级
+    - S-1 / S-1/A / F-1 / F-1/A / 424B4 / 424B1 → 升为 `"filed"`（若当前为 `"candidate"`）
+    - 无相关表单 → 保持现状
+  - **`_sync_one_issuer()`** 内部辅助：单 issuer 处理逻辑，含 status 更新和 commit
+  - 返回 `{issuer_count, filings_inserted, filings_skipped, filings_failed}`
+  - 支持 `python -m app.jobs.sync_sec_filings` 直接运行
+
+### 修改文件
+
+#### `app/collectors/sec.py`
+- **新增** `search_edgar_company(query, max_results=10) -> list[dict]`
+  - 下载 `https://www.sec.gov/files/company_tickers_exchange.json`（走 HTTP 缓存）
+  - 按 ticker 精确匹配或 company name 子串匹配（大小写不敏感）
+  - 返回 `{cik, name, ticker, exchange}` 列表
+  - 用途：帮助用户手动查找 CIK 后填入 issuers 表
+
+#### `README.md`
+- 新增"手动填入 CIK"章节（含 `search_edgar_company` 用法和 SQL 示例）
+- 新增"运行 SEC Filings 同步任务"章节
+- 更新"当前进度"列表
+
+### 不变文件
+- `app/models.py` / `app/schemas.py` — 无需修改（filings 表结构已满足需求）
+- `app/jobs/discover_candidates.py` — 无需修改
+- `app/utils/` — 无需修改
+
+### 验证
+- `search_edgar_company("Reddit")` → `[{"cik": "0001713445", "name": "Reddit, Inc.", ...}]`
+- 手动插入 Reddit CIK 后运行 `sync_sec_filings()`：
+  - 第一次：inserted=5, skipped=0, failed=0；status `candidate → filed`
+  - 第二次（幂等验证）：inserted=0, skipped=5, failed=0
+
+---
+
+## [Step 5] - 2026-03-14 — IPO 候选公司发现
+
+### 新增文件
+
+#### `app/collectors/nasdaq.py`
+- **新增** `fetch_nasdaq_candidates(lookback_months, lookahead_months, use_cache) -> list[dict]`
+  - 调用 `https://api.nasdaq.com/api/ipo/calendar?date=YYYY-MM`（需要浏览器 User-Agent，不能用 SEC_USER_AGENT）
+  - 默认抓取前 1 个月 + 当月 + 后 2 个月，共 4 次请求
+  - 合并三个 section：`priced`（pricedDate）、`upcoming.upcomingTable`（expectedPriceDate）、`filed`（filedDate）；排除 `withdrawn`
+  - 按 `dealID` 在函数内去重，防止同一 deal 跨月重复
+  - 每个候选 dict 字段：`company_name`、`ticker`、`exchange`、`source_url`、`raw_date_text`
+
+#### `app/collectors/nyse.py`
+- **新增** `fetch_nyse_candidates(use_cache) -> list[dict]`
+  - 调用 `https://www.nyse.com/api/ipo-center/calendar`（通过分析 NYSE IPO Center JS bundle 发现）
+  - 排除 `deal_status_flg == "W"`（withdrawn）的 deal
+  - epoch ms 时间戳转 ISO 日期（负值、TBA 占位值 > 4102444800000 均返回 None）
+  - 数据源字段：`issuer_nm` → `company_name`、`symbol` → `ticker`、`custom_group_exchange_nm` → `exchange`
+
+#### `app/jobs/discover_candidates.py`
+- **新增** `discover_candidates() -> dict`
+  - 独立调用 Nasdaq / NYSE 两个 collector，单个 source 失败不影响另一个
+  - 内存去重 key：`(ticker.upper(), company_name.lower())`，空 company_name 跳过
+  - DB upsert 逻辑：
+    1. 按 ticker 查找，若无则按 company_name（ilike）查找
+    2. 找到：仅当 exchange / ticker / source_url 为空时补填，设 updated_at
+    3. 未找到：INSERT，status = "candidate"
+  - 返回 `{total_fetched, inserted, updated, skipped}`
+- **支持直接运行**：`python -m app.jobs.discover_candidates`（`__main__` 块）
+
+### 修改文件
+
+#### `app/models.py`
+- `Issuer` 新增 `source_url = Column(Text, nullable=True)` — 记录候选来源页面 URL
+- ⚠️ 需重置数据库：`rm data/ipo_tracker.db && python scripts/init_db.py`
+
+#### `app/schemas.py`
+- `IssuerCreate` / `IssuerRead` 新增 `source_url: Optional[str] = None`
+
+#### `README.md`
+- 新增"运行 IPO 候选发现任务"章节，含命令行示例和 DB 重置提示
+- 更新"当前进度"列表
+
+### 不变文件
+- `app/utils/` — 无需修改
+- `app/collectors/sec.py` — 无需修改
+- `app/db.py` / `app/config.py` — 无需修改
+
+### 验证
+- `fetch_nasdaq_candidates()`：抓取 105 条候选（当月前后共 4 个月）
+- `fetch_nyse_candidates()`：抓取 13 条候选
+- 内存去重后 115 条唯一候选
+- `discover_candidates()` 一次运行：inserted=115, updated=0, skipped=0
+- 第二次运行（幂等性验证）：inserted=0, updated=0, skipped=115
+
+---
+
 ## [Step 4] - 2026-03-13 — SEC 数据采集层
 
 ### 新增文件

@@ -76,9 +76,60 @@ ipo_tracker/
 └── requirements.txt
 ```
 
+## 手动填入 CIK（SEC filings 同步的前提）
+
+`sync_sec_filings` 只处理 `issuers` 表中已有 `cik` 的公司。
+用以下方式查询 CIK，再手动更新数据库：
+
+```python
+from app.collectors.sec import search_edgar_company
+for hit in search_edgar_company("Reddit"):
+    print(hit)
+# {"cik": "0001713445", "name": "Reddit, Inc.", "ticker": "RDDT", "exchange": "NYSE"}
+```
+
+```sql
+UPDATE issuers SET cik = '1713445' WHERE ticker = 'RDDT';
+```
+
+## 运行 SEC Filings 同步任务
+
+```bash
+conda activate ipo_tracker
+python -m app.jobs.sync_sec_filings
+```
+
+输出示例：
+
+```
+Done — issuers=1  inserted=5  skipped=0  failed=0
+```
+
+## 运行 IPO 候选发现任务
+
+```bash
+conda activate ipo_tracker
+python -m app.jobs.discover_candidates
+```
+
+输出示例：
+
+```
+Done — fetched=115  inserted=115  updated=0  skipped=0
+```
+
+> **首次运行或模型升级后**需重置数据库：
+> ```bash
+> rm data/ipo_tracker.db
+> python scripts/init_db.py
+> ```
+
 ## 当前进度
 
 - [x] 第一阶段：项目骨架、配置、日志、数据库连接
 - [x] 第二阶段：完整数据库模型层（5 张表 + Pydantic schemas）
-- [ ] 第三阶段：SEC 客户端 + Nasdaq/NYSE 候选抓取
-- [ ] 后续阶段：解析器、定时任务、CSV 导出
+- [x] 第三阶段：HTTP 工具层（缓存、重试、限速）
+- [x] 第四阶段：SEC EDGAR 数据采集函数
+- [x] 第五阶段：Nasdaq + NYSE 候选发现 job
+- [x] 第六阶段：SEC filings 同步 job
+- [ ] 后续阶段：filing 解析器、CSV 导出
