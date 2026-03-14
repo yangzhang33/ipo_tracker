@@ -1,5 +1,71 @@
 # Changelog
 
+## [Step 9] - 2026-03-14 — Lock-Up 解析
+
+### 新增文件
+
+#### `app/parsers/lockup_parser.py`
+
+共用辅助函数：
+- **`_find_lockup_section(text)`** — 按优先级顺序搜索 lock-up 相关 section 标题（Lock-Up Agreements / Market Standoff / Shares Eligible for Future Sale / Underwriting），返回最多 6000 字符；无命中时返回全文。
+
+主要解析函数（均接受 `strip_html_to_text()` 输出的纯文本）：
+
+| 函数 | 说明 |
+|------|------|
+| `extract_lockup_days(text)` | 提取主锁定期天数。6 组 pattern 覆盖常见句式；优先在 section 内匹配，如无命中则回退全文；返回频次最高的合法天数（30–730 天）。 |
+| `detect_staged_unlock(text)` | 检测分段解锁语言（百分比释放、tranches、pro-rata 等），返回 bool。 |
+| `extract_unlock_notes(text)` | 从 lock-up 句中提取简洁说明片段，≤ 300 字符，多条用 ` \| ` 拼接；无命中返回 None。 |
+| `determine_confidence(text, lockup_days, is_staged_unlock)` | 基于启发规则：标准天数（90/180/360）且无分段解锁 → `high`；有 lockup_days 但分段或非标 → `medium`；无 lockup_days → `low`。 |
+
+#### `app/jobs/parse_lockups.py`
+
+- **`parse_lockups(force=False) -> dict`**
+  - 对所有 issuer 查询 filings → `select_best_filing` → 下载 HTML → `strip_html_to_text` → 调用 lockup parsers
+  - **日期口径**：`lockup_start_date = best.filing_date`（424B4 对应定价日；其余 form 用 filing_date 作保守代理）；`lockup_end_date = lockup_start_date + lockup_days`（`add_days` 计算）
+  - Upsert lockups：已有记录且 `force=False` 则 skip；`force=True` 覆盖所有字段
+  - `unlock_shares_estimate` v1 保留为 None
+  - 每个 issuer 独立 try/except，失败不中断后续处理
+  - 返回 `{issuer_count, parsed, skipped, failed}`
+  - 支持 `python -m app.jobs.parse_lockups [--force]`
+
+#### `tests/test_lockup_parser.py`
+
+26 个单元测试，覆盖全部解析函数：
+
+| 测试类 | 覆盖场景 |
+|--------|----------|
+| `TestExtractLockupDays` | 标准 180-day 完整句式、简短句式、90-day、beginning 句式、连字符格式、lock-up period of 句式、360-day、无 lock-up → None、超界天数过滤、频次投票 |
+| `TestDetectStagedUnlock` | 百分比释放、each period 句式、tranches、pro-rata、标准 180-day 无分段、空文本 |
+| `TestExtractUnlockNotes` | 捕获 lock-up 句子、无 lock-up → None、notes ≤ 300 字符 |
+| `TestDetermineConfidence` | 标准 180/90/360 → high、分段 → medium、非标天数 → medium、无天数 → low |
+
+### 不变文件
+- `app/parsers/filing_locator.py` — 无需修改
+- `app/parsers/prospectus_parser.py` / `app/parsers/capitalization_parser.py` — 无需修改
+- `app/jobs/parse_offering_data.py` — 无需修改
+- `app/models.py` / `app/schemas.py` / `app/db.py` — 无需修改
+
+### 已知限制（v1）
+- `unlock_shares_estimate` 留空（v1 不支持）
+- staged unlock 仅标注 `is_staged_unlock=True`，不做分段拆解
+- 复杂句式（多主体、分条款 lock-up）可能只提取主天数，`confidence` 降为 `medium`
+
+### 验证
+
+```
+pytest tests/test_lockup_parser.py -v
+26 passed in 0.01s
+```
+
+运行 lock-up 解析 job：
+```bash
+conda activate ipo_tracker
+python -m app.jobs.parse_lockups
+```
+
+---
+
 ## [Step 8] - 2026-03-14 — Prospectus 字段解析
 
 ### 新增文件

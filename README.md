@@ -124,6 +124,25 @@ Done — fetched=115  inserted=115  updated=0  skipped=0
 > python scripts/init_db.py
 > ```
 
+## 运行 Lock-Up 解析任务
+
+```bash
+conda activate ipo_tracker
+python -m app.jobs.parse_lockups
+```
+
+输出示例：
+
+```
+Done — issuers=1  parsed=1  skipped=0  failed=0
+```
+
+加 `--force` 强制重新解析已有记录：
+
+```bash
+python -m app.jobs.parse_lockups --force
+```
+
 ## 当前进度
 
 - [x] 第一阶段：项目骨架、配置、日志、数据库连接
@@ -132,4 +151,7 @@ Done — fetched=115  inserted=115  updated=0  skipped=0
 - [x] 第四阶段：SEC EDGAR 数据采集函数
 - [x] 第五阶段：Nasdaq + NYSE 候选发现 job
 - [x] 第六阶段：SEC filings 同步 job
-- [ ] 后续阶段：filing 解析器、CSV 导出
+- [x] 第七阶段：最佳 filing 选择器
+- [x] 第八阶段：Prospectus 字段解析（offering + capitalization）
+- [x] 第九阶段：Lock-up 解析（lockup_days、日期、staged unlock 检测）
+- [ ] 后续阶段：CSV 导出报表、总入口脚本
